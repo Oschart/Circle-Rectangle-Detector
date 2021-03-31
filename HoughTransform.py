@@ -76,10 +76,9 @@ class HoughTransform:
             # Creating a Circle Blueprint
             bprint = np.zeros((2*(r+1), 2*(r+1)))
             (m, n) = (r+1, r+1)  # Finding out the center of the blueprint
-            for angle in theta:
-                x = int(np.round(r*np.cos(angle)))
-                y = int(np.round(r*np.sin(angle)))
-                bprint[m+x, n+y] = 1
+            x = np.round(r*np.cos(theta)).astype(int)
+            y = np.round(r*np.sin(theta)).astype(int)
+            bprint[m+x, n+y] = 1
             constant = np.argwhere(bprint).shape[0]
             for x, y in edges:  # For each edge coordinates
                 # Centering the blueprint circle over the edges
@@ -116,7 +115,7 @@ class HoughTransform:
             x2 = int(x0 - 1000*(-b))
             y2 = int(y0 - 1000*(a))
 
-            cv2.line(marked_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.line(marked_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
             
         return marked_img
 
