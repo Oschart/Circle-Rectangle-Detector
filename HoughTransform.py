@@ -17,12 +17,12 @@ class HoughTransform:
         self.r_max = 100
 
     def apply_edge_filter(self, X):
-        return cv2.Canny(X, 100, 150, apertureSize=3)
+        return cv2.Canny(X, 50, 150, apertureSize=3)
 
     # TODO: change in the code
     def detect_lines(self, img, th):
         # Rho and Theta ranges
-        Theta = np.deg2rad(np.arange(0.0, 180.0, step=0.5))
+        Theta = np.deg2rad(np.arange(0.0, 180.0, step=1.0))
         height, width = img.shape
         diag_len = int(
             np.ceil(np.sqrt(width * width + height * height)))   # max_dist
@@ -50,44 +50,37 @@ class HoughTransform:
 
         h_space = [np.rad2deg(Theta), Rho_R]
 
-        return Acc, LR, LT, h_space 
+        return Acc, LR, LT, h_space
 
     def detect_circles(self, img, th, region, R_bounds=None):
         (M, N) = img.shape
         if R_bounds == None:
-            R_max = np.max((M, N))
-            R_min = 3
+            [r_max, r_min] = [max(M, N), 5]
         else:
-            [R_max, R_min] = R_bounds
+            [r_max, r_min] = R_bounds
 
-        R = R_max - R_min
-        # Initializing accumulator array.
-        # Accumulator array is a 3 dimensional array with the dimensions representing
-        # the radius, X coordinate and Y coordinate resectively.
-        # Also appending a padding of 2 times R_max to overcome the problems of overflow
-        A = np.zeros((R_max, M+2*R_max, N+2*R_max))
-        B = np.zeros((R_max, M+2*R_max, N+2*R_max))
+        # Accumulator
+        A = np.zeros((r_max, M+2*r_max, N+2*r_max))
+        B = np.zeros((r_max, M+2*r_max, N+2*r_max))
 
-        # Precomputing all angles to increase the speed of the algorithm
         theta = np.arange(0, 360)*np.pi/180
-        edges = np.argwhere(img)  # Extracting all edge coordinates
-        for val in range(R):
-            r = R_min+val
-            # Creating a Circle Blueprint
-            bprint = np.zeros((2*(r+1), 2*(r+1)))
-            (m, n) = (r+1, r+1)  # Finding out the center of the blueprint
+        C_y_x = np.argwhere(img)
+        for r in range(r_min, r_max):
+            # Circle template
+            ctemp = np.zeros((2*(r+1), 2*(r+1)))
+            R = r+1
             x = np.round(r*np.cos(theta)).astype(int)
             y = np.round(r*np.sin(theta)).astype(int)
-            bprint[m+x, n+y] = 1
-            constant = np.argwhere(bprint).shape[0]
-            for x, y in edges:  # For each edge coordinates
-                # Centering the blueprint circle over the edges
-                # and updating the accumulator array
-                X = [x-m+R_max, x+m+R_max]  # Computing the extreme X values
-                Y = [y-n+R_max, y+n+R_max]  # Computing the extreme Y values
-                A[r, X[0]:X[1], Y[0]:Y[1]] += bprint
-            A[r][A[r] < th*constant/r] = 0
+            ctemp[R+x, R+y] = 1
+            circum = np.argwhere(ctemp).shape[0]
 
+            for x, y in C_y_x:
+                X = [x-R+r_max, x+R+r_max]
+                Y = [y-R+r_max, y+R+r_max]
+                A[r, X[0]:X[1], Y[0]:Y[1]] += ctemp
+            A[r][A[r]*r < th*circum] = 0
+
+        # Local peak search
         for r, x, y in np.argwhere(A):
             temp = A[r-region:r+region, x-region:x+region, y-region:y+region]
             try:
@@ -96,13 +89,12 @@ class HoughTransform:
                 continue
             B[r+(p-region), x+(a-region), y+(b-region)] = 1
 
-        return B[:, R_max:-R_max, R_max:-R_max]
-
+        return B[:, r_max:-r_max, r_max:-r_max]
 
     def draw_lines(self, img, LR, LT):
         height, width = img.shape[0], img.shape[1]
         marked_img = np.array(img, copy=True)
-        
+
         for rho, theta in zip(LR, LT):
             a = np.cos(theta)
             b = np.sin(theta)
@@ -116,7 +108,7 @@ class HoughTransform:
             y2 = int(y0 - 1000*(a))
 
             cv2.line(marked_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            
+
         return marked_img
 
     def draw_circles(self, orig_img, CS):
@@ -128,4 +120,3 @@ class HoughTransform:
             # draw the center of the circle
             cv2.circle(img, (y, x), 2, (0, 0, 255), 3)
         return img
-
