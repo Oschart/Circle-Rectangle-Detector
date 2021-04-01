@@ -8,29 +8,24 @@ import cv2
 class HoughTransform:
 
     def __init__(self):
-        # Line and circle thresholds
-        self.line_th = 50
-        self.circle_th = 50
-        self.origin_th = 5
-
-        self.r_min = 20
-        self.r_max = 100
+        # Default parameters
+        self.r_min = 5
+        # For small difference detection
         self.eps_theta = 0.3
         self.eps_rho = 10
 
     def apply_edge_filter(self, X):
         return cv2.Canny(X, 50, 150, apertureSize=3)
 
-    # TODO: change in the code
     def detect_lines(self, img, th):
-        # Rho and Theta ranges
+        # Theta codomain
         Theta = np.deg2rad(np.arange(0.0, 180.0, step=1.0))
         height, width = img.shape
-        diag_len = int(
-            np.ceil(np.sqrt(width * width + height * height)))   # max_dist
+        D = int(
+            np.ceil(np.sqrt(width * width + height * height)))   # Diagnonal length
 
         # Rho codomain
-        Rho_C = np.linspace(-diag_len, diag_len, int(2*diag_len))
+        Rho_C = np.linspace(-D, D, int(2*D))
 
         cos_t = np.cos(Theta)
         sin_t = np.sin(Theta)
@@ -95,16 +90,17 @@ class HoughTransform:
         unique.append(SL[-1])
         return unique
 
-    def detect_circles(self, img, th, region, R_bounds=None):
+    def detect_circles(self, img, th, locale, R_bounds=None):
         (M, N) = img.shape
         if R_bounds == None:
-            [r_max, r_min] = [max(M, N), 5]
+            [r_max, r_min] = [max(M, N), self.r_min]
         else:
             [r_max, r_min] = R_bounds
 
         # Accumulator
-        A = np.zeros((r_max, M+2*r_max, N+2*r_max))
-        B = np.zeros((r_max, M+2*r_max, N+2*r_max))
+        Acc = np.zeros((r_max, M+2*r_max, N+2*r_max))
+        # Peak space
+        Pk = np.zeros((r_max, M+2*r_max, N+2*r_max))
 
         theta = np.arange(0, 360)*np.pi/180
         C_y_x = np.argwhere(img)
@@ -120,19 +116,19 @@ class HoughTransform:
             for x, y in C_y_x:
                 X = [x-R+r_max, x+R+r_max]
                 Y = [y-R+r_max, y+R+r_max]
-                A[r, X[0]:X[1], Y[0]:Y[1]] += ctemp
-            A[r][A[r]*r < th*circum] = 0
+                Acc[r, X[0]:X[1], Y[0]:Y[1]] += ctemp
+            Acc[r][Acc[r]*r < th*circum] = 0
 
         # Local peak search
-        for r, x, y in np.argwhere(A):
-            temp = A[r-region:r+region, x-region:x+region, y-region:y+region]
+        for r, x, y in np.argwhere(Acc):
+            region = Acc[r-locale:r+locale, x-locale:x+locale, y-locale:y+locale]
             try:
-                p, a, b = np.unravel_index(np.argmax(temp), temp.shape)
+                p, a, b = np.unravel_index(np.argmax(region), region.shape)
             except:
                 continue
-            B[r+(p-region), x+(a-region), y+(b-region)] = 1
+            Pk[r+(p-locale), x+(a-locale), y+(b-locale)] = 1
 
-        return B[:, r_max:-r_max, r_max:-r_max]
+        return Pk[:, r_max:-r_max, r_max:-r_max]
 
     def draw_lines(self, img, lines):
         height, width = img.shape[0], img.shape[1]
@@ -170,10 +166,10 @@ class HoughTransform:
 
     def draw_circles(self, orig_img, CS):
         img = np.array(orig_img, copy=True)
-        circle_specs = np.argwhere(CS)  # Extracting the circle information
+        circle_specs = np.argwhere(CS)  
         for r, x, y in circle_specs:
-            # draw the outer circle
-            cv2.circle(img, (y, x), r, (0, 255, 0), 2)
-            # draw the center of the circle
-            cv2.circle(img, (y, x), 2, (0, 0, 255), 3)
+            # Circle peremeter
+            cv2.circle(img, (y, x), r, (4,0,255), 2)
+            # Circle center
+            cv2.circle(img, (y, x), 2, (0, 255, 0), 3)
         return img
