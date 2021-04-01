@@ -1,7 +1,7 @@
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
-
+import itertools
 import cv2
 
 
@@ -15,6 +15,8 @@ class HoughTransform:
 
         self.r_min = 20
         self.r_max = 100
+        self.eps_theta = 0.3
+        self.eps_rho = 10
 
     def apply_edge_filter(self, X):
         return cv2.Canny(X, 50, 150, apertureSize=3)
@@ -51,6 +53,47 @@ class HoughTransform:
         h_space = [np.rad2deg(Theta), Rho_R]
 
         return Acc, LR, LT, h_space
+
+    def form_rects(self, lines):
+        rects = []
+        for subset in itertools.combinations(lines, 4):
+            S = sorted(subset, key=lambda x: x[1])
+            par1 = abs(S[0][1] - S[1][1]) > self.eps_theta
+            par2 = abs(S[2][1] - S[3][1]) > self.eps_theta
+            orth = abs(abs(S[0][1] - S[2][1]) - np.pi/2) > self.eps_theta
+            if par1 or par2 or orth:
+                continue
+            p1 = self.solve_line(S[0], S[2])
+            p2 = self.solve_line(S[0], S[3])
+            p3 = self.solve_line(S[1], S[2])
+            p4 = self.solve_line(S[1], S[3])
+            rects.append((p1, p2, p3, p4))
+        return rects
+
+    def solve_line(self, l1, l2):
+        cos1 = np.cos(l1[1])
+        sin1 = np.sin(l1[1])
+        cos2 = np.cos(l2[1])
+        sin2 = np.sin(l2[1])
+        A = np.array([
+            [cos1, sin1],
+            [cos2, sin2]
+        ])
+        b = np.array([l1[0], l2[0]])
+        A_inv = np.linalg.inv(A)
+        return A_inv@b
+
+    def clear_similar_lines(self, lines):
+        unique = []
+        n = len(lines) - 1
+        SL = sorted(lines)
+        for i in range(n):
+            if abs(SL[i][0] - SL[i+1][0]) < self.eps_rho and abs(SL[i][1] - SL[i+1][1]) < self.eps_theta:
+                continue
+            else:
+                unique.append(SL[i])
+        unique.append(SL[-1])
+        return unique
 
     def detect_circles(self, img, th, region, R_bounds=None):
         (M, N) = img.shape
@@ -91,11 +134,11 @@ class HoughTransform:
 
         return B[:, r_max:-r_max, r_max:-r_max]
 
-    def draw_lines(self, img, LR, LT):
+    def draw_lines(self, img, lines):
         height, width = img.shape[0], img.shape[1]
         marked_img = np.array(img, copy=True)
 
-        for rho, theta in zip(LR, LT):
+        for rho, theta in lines:
             a = np.cos(theta)
             b = np.sin(theta)
             offset = a*(width//2) + b*(height//2)
@@ -108,6 +151,20 @@ class HoughTransform:
             y2 = int(y0 - 1000*(a))
 
             cv2.line(marked_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
+        return marked_img
+
+    def draw_rects(self, img, rects):
+        height, width, _ = img.shape
+        marked_img = np.array(img, copy=True)
+        offset = np.array([width//2, height//2])
+        rects = np.array(rects).astype(int) + offset
+        for rect in rects:
+            trect = [tuple(p) for p in rect.tolist()]
+            cv2.line(marked_img, trect[0], trect[1], (255, 0, 0), 2)
+            cv2.line(marked_img, trect[0], trect[2], (255, 0, 0), 2)
+            cv2.line(marked_img, trect[3], trect[1], (255, 0, 0), 2)
+            cv2.line(marked_img, trect[3], trect[2], (255, 0, 0), 2)
 
         return marked_img
 
