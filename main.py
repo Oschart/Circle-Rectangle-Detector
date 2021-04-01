@@ -7,47 +7,58 @@ from skimage.io import imread, imshow
 
 from HoughTransform import HoughTransform
 import cv2
-from utils import plot_hough_transform
+from utils import plot_showcase
+
+LINE_THRESHOLD = 92     # Line detection threshold
+CIRC_THRESHOLD = 13     # Circle detection threshold
+
+def run(case_ids=range(4)):
+
+    test_cases = [f'./test_cases/case{i}.jpg' for i in case_ids]
+    for test_img in test_cases:
+
+        init_final, transform_imgs = process_img(test_img)
+        orig_img, final_img = init_final
+        edge_img, h_space, imcr = transform_imgs
+
+        plot_data1 = [(orig_img, None, 'Original Image'),
+                      (edge_img, 'gray', 'Edge Image'),
+                      (h_space, 'h_space', 'Hough Space'),
+                      (imcr, None, 'Detected Shapes')]
+        plot_data2 = [(orig_img, None, 'Original Image'),
+                      (final_img, None, 'Annotated Image')]
+
+        plot_showcase(plot_data1, figsize=(12, 9))
+        plot_showcase(plot_data2, figsize=(8, 8))
+        # %%
 
 
+def process_img(img_path):
+    orig_img = cv2.imread(img_path)
+    orig_img = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
 
-orig_img = cv2.imread('./test_cases/case1.jpeg')
-orig_img = cv2.cvtColor(orig_img,cv2.COLOR_BGR2RGB)
+    gray_img = cv2.cvtColor(orig_img, cv2.COLOR_BGR2GRAY)
+    gray_img = cv2.medianBlur(gray_img, 11)
 
+    HT = HoughTransform()
 
-img_gray = cv2.cvtColor(orig_img,cv2.COLOR_BGR2GRAY)
-img_gray = cv2.bilateralFilter(img_gray,9,75,75)
+    edge_img = HT.apply_edge_filter(gray_img)
 
-HT = HoughTransform()
+    CS = HT.detect_circles(edge_img, CIRC_THRESHOLD, 15, R_bounds=[30, 22])
+    grad_img_rgb = cv2.cvtColor(edge_img, cv2.COLOR_GRAY2RGB)
+    imc = HT.draw_circles(grad_img_rgb, CS)
 
-grad_img = HT.apply_edge_filter(img_gray)
-plt.imshow(grad_img, cmap='gray')
-plt.show()
+    Acc, LR, LT, h_space = HT.detect_lines(edge_img, th=LINE_THRESHOLD)
 
+    lines = list(zip(LR, LT))
+    ulines = HT.clear_similar_lines(lines)
 
-'''
-CS = HT.circle_transform(grad_img, 15, 15, R_bounds=[40,20])
-grad_img_rgb = cv2.cvtColor(grad_img, cv2.COLOR_GRAY2RGB)
-marked_img1 = HT.draw_circles(grad_img_rgb, CS)
-plt.imshow(marked_img1)
-plt.show()
+    imcl = HT.draw_lines(imc, ulines)
 
-exit()
-'''
+    rects = HT.form_rects(ulines)
+    imcr = HT.draw_rects(imc, rects)
 
-Acc, LR, LT, h_space  = HT.detect_lines(grad_img, th=170)
-print(np.max(Acc))
-print(LR)
-print(LT)
+    final_img = HT.draw_circles(HT.draw_rects(orig_img, rects), CS)
 
+    return [orig_img, final_img], [edge_img, h_space, imcr]
 
-grad_img_rgb = cv2.cvtColor(grad_img, cv2.COLOR_GRAY2RGB)
-marked_img = HT.draw_lines(grad_img_rgb, LR, LT)
-plt.imshow(marked_img)
-plt.show()
-
-plot_data = [(grad_img, 'gray'), (h_space, 'h_space'), (marked_img, None)]
-titles = ['1', '2', '3']
-
-plot_hough_transform(plot_data, titles)
-# %%
